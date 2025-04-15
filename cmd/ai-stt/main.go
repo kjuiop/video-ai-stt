@@ -22,7 +22,10 @@ func main() {
 	a := app.NewApplication()
 
 	wg.Add(1)
-	go a.Start(ctx, &wg)
+	go a.WatcherVideoFiles(ctx, &wg)
+
+	wg.Add(1)
+	go a.ExtractAudio(ctx, &wg)
 
 	slog.Debug("ai stt app start", "git_hash", GIT_HASH, "build_time", BUILD_TIME, "app_version", APP_VERSION)
 

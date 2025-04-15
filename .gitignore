@@ -1,5 +1,11 @@
 # bin
 bin
+ai-stt
 
 # idea
 .idea
+
+# files
+uploads
+upoloads_temp
+extract_audio

@@ -3,7 +3,19 @@ package config
 import "github.com/kelseyhightower/envconfig"
 
 type AISttConfig struct {
+	WatcherFiles
+	Extractor
 	Logger
+}
+
+type WatcherFiles struct {
+	WatcherDir string `envconfig:"STT_WATCHER_DIR" default:"./uploads"`
+}
+
+type Extractor struct {
+	OutputDir     string `envconfig:"STT_OUTPUT_DIR" default:"./extract_audio"`
+	OutputBitrate string `envconfig:"STT_OUTPUT_BITRATE" default:"96k"`
+	OutputFormat  string `envconfig:"STT_OUTPUT_FORMAT" default:"mp3"`
 }
 
 type Logger struct {
