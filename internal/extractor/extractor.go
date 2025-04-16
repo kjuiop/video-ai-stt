@@ -8,15 +8,18 @@ import (
 	"strings"
 	"sync"
 	"video-ai-stt/config"
+	"video-ai-stt/internal/process"
 )
 
 type Extractor struct {
-	cfg config.Extractor
+	cfg       config.Extractor
+	processed *process.ProcessedManager
 }
 
-func NewExtractor(cfg config.Extractor) *Extractor {
+func NewExtractor(cfg config.Extractor, manager *process.ProcessedManager) *Extractor {
 	return &Extractor{
-		cfg: cfg,
+		cfg:       cfg,
+		processed: manager,
 	}
 }
 
@@ -37,18 +40,25 @@ LOOP:
 				break LOOP
 			}
 
+			alreadyProcess := e.processed.IsProcessed(path, process.EXTRACT_AUDIO_START)
+			if alreadyProcess {
+				continue
+			}
+
 			wg.Add(1)
 			go func(videoPath string) {
 				defer wg.Done()
 
-				slog.Info("start audio extractor goroutine", "path", videoPath)
+				e.processed.MarkProcessed(videoPath, process.EXTRACT_AUDIO_START)
+				slog.Info("start audio extractor goroutine", "path", videoPath, "step", process.EXTRACT_AUDIO_START)
 
 				if err := e.extractAudio(videoPath); err != nil {
 					slog.Error("failed extract audio ffmpeg", "err", err.Error())
 					return
 				}
 
-				slog.Info("end audio extractor goroutine", "path", videoPath)
+				e.processed.MarkProcessed(videoPath, process.EXTRACT_AUDIO_COMPLETE)
+				slog.Info("end audio extractor goroutine", "path", videoPath, "step", process.EXTRACT_AUDIO_COMPLETE)
 			}(path)
 		}
 	}

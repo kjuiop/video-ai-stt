@@ -7,6 +7,7 @@ import (
 	"sync"
 	"video-ai-stt/config"
 	"video-ai-stt/internal/extractor"
+	"video-ai-stt/internal/process"
 	"video-ai-stt/internal/watcher"
 	"video-ai-stt/logger"
 )
@@ -29,10 +30,12 @@ func NewApplication() *App {
 		log.Fatalf("fail to init slog err : %v", err)
 	}
 
+	manager := process.NewProcessedManager()
+
 	return &App{
 		cfg:       cfg,
-		watcher:   watcher.NewWatcher(cfg.WatcherFiles),
-		extractor: extractor.NewExtractor(cfg.Extractor),
+		watcher:   watcher.NewWatcher(cfg.WatcherFiles, manager),
+		extractor: extractor.NewExtractor(cfg.Extractor, manager),
 		videoChan: make(chan string),
 	}
 }

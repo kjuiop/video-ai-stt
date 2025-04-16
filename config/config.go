@@ -9,7 +9,9 @@ type AISttConfig struct {
 }
 
 type WatcherFiles struct {
-	WatcherDir string `envconfig:"STT_WATCHER_DIR" default:"./uploads"`
+	WatcherDir    string `envconfig:"STT_WATCHER_DIR" default:"./uploads"`
+	WatcherSuffix string `envconfig:"STT_WATCHER_SUFFIX" default:"_begin"`
+	WatchInterval int    `envconfig:"STT_WATCH_INTERVAL" default:"5"`
 }
 
 type Extractor struct {
