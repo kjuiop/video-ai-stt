@@ -1,0 +1,35 @@
+package process
+
+import "sync"
+
+const (
+	WATCHER_FILE_REGISTER  = iota + 1 // 1: 작업대상파일로 등록
+	EXTRACT_AUDIO_START               // 2: 영상에서 오디오 추출 시작
+	EXTRACT_AUDIO_COMPLETE            // 3: 영상에서 오디오 추출 완료
+)
+
+type ProcessedManager struct {
+	memory *sync.Map
+}
+
+func NewProcessedManager() *ProcessedManager {
+	return &ProcessedManager{memory: &sync.Map{}}
+}
+
+func (p *ProcessedManager) IsProcessed(key string, expected int) bool {
+	val, ok := p.memory.Load(key)
+	if !ok {
+		return false
+	}
+
+	v, ok := val.(int)
+	if !ok {
+		return false
+	}
+
+	return v >= expected
+}
+
+func (p *ProcessedManager) MarkProcessed(key string, value int) {
+	p.memory.Store(key, value)
+}
