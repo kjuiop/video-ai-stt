@@ -23,7 +23,7 @@ func NewExtractor(cfg config.Extractor, manager *process.ProcessedManager) *Extr
 	}
 }
 
-func (e *Extractor) Process(ctx context.Context, videoCh <-chan string) error {
+func (e *Extractor) Process(ctx context.Context, videoCh <-chan string, audioCh chan<- string) error {
 
 	wg := sync.WaitGroup{}
 
@@ -31,12 +31,12 @@ LOOP:
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Debug("context done, breaking loop")
+			slog.Debug("extract goroutine close")
 			break LOOP
 
 		case path, ok := <-videoCh:
 			if !ok {
-				slog.Debug("videoCh closed, breaking loop")
+				slog.Debug("extractor videoCh closed, breaking loop")
 				break LOOP
 			}
 
@@ -52,11 +52,15 @@ LOOP:
 				e.processed.MarkProcessed(videoPath, process.EXTRACT_AUDIO_START)
 				slog.Info("start audio extractor goroutine", "path", videoPath, "step", process.EXTRACT_AUDIO_START)
 
-				if err := e.extractAudio(videoPath); err != nil {
+				outputPath, err := e.extractAudio(videoPath)
+				if err != nil {
 					slog.Error("failed extract audio ffmpeg", "err", err.Error())
 					return
 				}
 
+				slog.Debug("finish", "output_path", outputPath)
+
+				audioCh <- outputPath
 				e.processed.MarkProcessed(videoPath, process.EXTRACT_AUDIO_COMPLETE)
 				slog.Info("end audio extractor goroutine", "path", videoPath, "step", process.EXTRACT_AUDIO_COMPLETE)
 			}(path)
@@ -70,15 +74,17 @@ LOOP:
 	return nil
 }
 
-func (e *Extractor) extractAudio(path string) error {
+func (e *Extractor) extractAudio(path string) (string, error) {
 
 	filename := filepath.Base(path)
-	outputPath := filepath.Join(e.cfg.OutputDir, filename)
+	outputPath := e.changeExtOutputPath(filepath.Join(e.cfg.OutputDir, filename))
 
 	cmd := NewFFmpegBuilder().
 		Input(path).
-		AudioBitrate(e.cfg.OutputBitrate).
+		AudioSampleRate(e.cfg.OutputSampleRate).
+		AudioChannels(1).
 		MapAudio().
+		UseFlacCodec().
 		Output(outputPath).
 		Build()
 
@@ -89,8 +95,14 @@ func (e *Extractor) extractAudio(path string) error {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return outputPath, nil
+}
+
+func (e *Extractor) changeExtOutputPath(outputPath string) string {
+	ext := filepath.Ext(outputPath)
+	base := strings.TrimSuffix(outputPath, ext)
+	return base + e.cfg.OutputFormat
 }

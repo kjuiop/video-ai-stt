@@ -45,6 +45,10 @@ func (w *Watcher) Process(ctx context.Context, videoCh chan<- string) error {
 					return nil
 				}
 
+				if strings.Contains(path, w.cfg.IgnoreDir) {
+					return nil
+				}
+
 				filename := info.Name()
 				if !w.checkVideoFile(filename) {
 					return nil

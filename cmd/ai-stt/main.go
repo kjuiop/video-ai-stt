@@ -27,6 +27,9 @@ func main() {
 	wg.Add(1)
 	go a.ExtractAudio(ctx, &wg)
 
+	wg.Add(1)
+	go a.GenerateSubtitle(ctx, &wg)
+
 	slog.Debug("ai stt app start", "git_hash", GIT_HASH, "build_time", BUILD_TIME, "app_version", APP_VERSION)
 
 	<-exitSignal()

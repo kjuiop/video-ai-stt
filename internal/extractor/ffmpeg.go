@@ -2,8 +2,7 @@ package extractor
 
 import (
 	"os/exec"
-	"path/filepath"
-	"strings"
+	"strconv"
 )
 
 type FFmpegBuilder struct {
@@ -22,22 +21,27 @@ func (b *FFmpegBuilder) Input(inputPath string) *FFmpegBuilder {
 }
 
 func (b *FFmpegBuilder) Output(outputPath string) *FFmpegBuilder {
-
-	ext := filepath.Ext(outputPath)
-	base := strings.TrimSuffix(outputPath, ext)
-	mp3Path := base + ".mp3"
-
-	b.args = append(b.args, mp3Path)
+	b.args = append(b.args, outputPath)
 	return b
 }
 
-func (b *FFmpegBuilder) AudioBitrate(bitrate string) *FFmpegBuilder {
-	b.args = append(b.args, "-b:a", bitrate)
+func (b *FFmpegBuilder) AudioSampleRate(sampleRate string) *FFmpegBuilder {
+	b.args = append(b.args, "-ar", sampleRate)
+	return b
+}
+
+func (b *FFmpegBuilder) AudioChannels(channels int) *FFmpegBuilder {
+	b.args = append(b.args, "-ac", strconv.Itoa(channels))
 	return b
 }
 
 func (b *FFmpegBuilder) MapAudio() *FFmpegBuilder {
-	b.args = append(b.args, "-map", "a")
+	b.args = append(b.args, "-map", "0:a")
+	return b
+}
+
+func (b *FFmpegBuilder) UseFlacCodec() *FFmpegBuilder {
+	b.args = append(b.args, "-c:a", "flac")
 	return b
 }
 
