@@ -1,3 +1,10 @@
 # video-ai-stt
 
 영상 업로드를 진행하면 그에 따른 자막을 생산한다.
+
+
+<br />
+
+### groq stt 
+
+- https://console.groq.com/docs/speech-to-text

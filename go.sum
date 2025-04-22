@@ -1,3 +1,5 @@
+github.com/akadotsh/groq-go-sdk v0.0.5 h1:ACLl5qrXN+/kNC9nC8yag8xKuZtPSdKD11ZgHACh9DU=
+github.com/akadotsh/groq-go-sdk v0.0.5/go.mod h1:mlGCHTL+9re1RkGdyKyFFFCBS4qhswlIrq4Z934gBZc=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dvMUtDTo2cv8=
