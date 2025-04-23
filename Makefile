@@ -14,10 +14,15 @@ LDFLAGS+=-X main.APP_VERSION=$(TARGET_VERSION)
 LDFLAGS+=-X main.GIT_HASH=`git rev-parse HEAD`
 LDFLAGS+=-s -w
 
+.PHONY: config
+
 all: config test build
 
 config:
-	@if [ ! -d $(TARGET_DIR) ]; then mkdir $(TARGET_DIR); fi
+	mkdir -p $(TARGET_DIR)
+	mkdir -p uploads/.working
+	mkdir -p extract_audio
+	mkdir -p output
 
 build:
 	CGO_ENABLED=0 GOOS=linux go build -ldflags "$(LDFLAGS)" -o $(OUTPUT) $(PROJECT_PATH)$(MAIN_FILE)
@@ -36,3 +41,5 @@ build_num:
 
 test:
 	@go test ./...
+
+install:
