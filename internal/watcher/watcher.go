@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"video-ai-stt/config"
+	"video-ai-stt/internal/job"
 	"video-ai-stt/internal/process"
 )
 
@@ -23,7 +24,7 @@ func NewWatcher(cfg config.WatcherFiles, manager *process.ProcessedManager) *Wat
 	}
 }
 
-func (w *Watcher) Process(ctx context.Context, videoCh chan<- string) error {
+func (w *Watcher) Process(ctx context.Context, videoCh chan<- *job.Job) error {
 
 	slog.Debug("watcher start", "watcher_dir", w.cfg.WatcherDir)
 
@@ -36,7 +37,7 @@ func (w *Watcher) Process(ctx context.Context, videoCh chan<- string) error {
 			slog.Debug("close watcher file goroutine", "watcher_dir", w.cfg.WatcherDir)
 			return nil
 		case <-ticker.C:
-			err := filepath.Walk(w.cfg.WatcherDir, func(path string, info os.FileInfo, err error) error {
+			err := filepath.Walk(w.cfg.WatcherDir, func(videoPath string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
@@ -45,7 +46,7 @@ func (w *Watcher) Process(ctx context.Context, videoCh chan<- string) error {
 					return nil
 				}
 
-				if strings.Contains(path, w.cfg.IgnoreDir) {
+				if strings.Contains(videoPath, w.cfg.IgnoreDir) {
 					return nil
 				}
 
@@ -54,14 +55,15 @@ func (w *Watcher) Process(ctx context.Context, videoCh chan<- string) error {
 					return nil
 				}
 
-				alreadyProcess := w.processed.IsProcessed(path, process.WATCHER_FILE_REGISTER)
+				alreadyProcess := w.processed.IsProcessed(videoPath, process.WATCHER_FILE_REGISTER)
 				if alreadyProcess {
 					return nil
 				}
 
-				w.processed.MarkProcessed(path, process.WATCHER_FILE_REGISTER)
-				videoCh <- path
-				slog.Info("watcher new file", "watcher_dir", w.cfg.WatcherDir, "filename", filename, "step", process.WATCHER_FILE_REGISTER)
+				jobs := job.NewJob(videoPath, filename)
+				w.processed.MarkProcessed(videoPath, process.WATCHER_FILE_REGISTER)
+				slog.Info("watcher new file", "rid", jobs.GetRID(), "watcher_dir", w.cfg.WatcherDir, "filename", filename, "video_path", jobs.GetVideoPath(), "step", process.WATCHER_FILE_REGISTER)
+				videoCh <- jobs
 				return nil
 			})
 
