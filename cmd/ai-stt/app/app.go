@@ -8,6 +8,7 @@ import (
 	"video-ai-stt/config"
 	"video-ai-stt/internal/extractor"
 	"video-ai-stt/internal/groq"
+	"video-ai-stt/internal/job"
 	"video-ai-stt/internal/process"
 	"video-ai-stt/internal/watcher"
 	"video-ai-stt/logger"
@@ -18,8 +19,8 @@ type App struct {
 	watcher    *watcher.Watcher
 	extractor  *extractor.Extractor
 	groqClient *groq.Groq
-	videoChan  chan string
-	audioChan  chan string
+	videoCh    chan *job.Job
+	audioCh    chan *job.Job
 }
 
 func NewApplication() *App {
@@ -39,8 +40,8 @@ func NewApplication() *App {
 		cfg:        cfg,
 		watcher:    watcher.NewWatcher(cfg.WatcherFiles, manager),
 		extractor:  extractor.NewExtractor(cfg.Extractor, manager),
-		videoChan:  make(chan string),
-		audioChan:  make(chan string),
+		videoCh:    make(chan *job.Job),
+		audioCh:    make(chan *job.Job),
 		groqClient: groq.NewGroq(cfg.Groq, manager),
 	}
 }
@@ -48,7 +49,7 @@ func NewApplication() *App {
 func (a *App) WatcherVideoFiles(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	if err := a.watcher.Process(ctx, a.videoChan); err != nil {
+	if err := a.watcher.Process(ctx, a.videoCh); err != nil {
 		slog.Error("fail to watcher process", "watcher_dir", a.cfg.WatcherDir, "error", err.Error())
 	}
 }
@@ -56,7 +57,7 @@ func (a *App) WatcherVideoFiles(ctx context.Context, wg *sync.WaitGroup) {
 func (a *App) ExtractAudio(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	if err := a.extractor.Process(ctx, a.videoChan, a.audioChan); err != nil {
+	if err := a.extractor.Process(ctx, a.videoCh, a.audioCh); err != nil {
 		slog.Error("fail to extractor process", "error", err.Error())
 	}
 }
@@ -64,7 +65,7 @@ func (a *App) ExtractAudio(ctx context.Context, wg *sync.WaitGroup) {
 func (a *App) GenerateSubtitle(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	if err := a.groqClient.Process(ctx, a.audioChan); err != nil {
+	if err := a.groqClient.Process(ctx, a.audioCh); err != nil {
 		slog.Error("fail to groq client process", "error", err.Error())
 	}
 }

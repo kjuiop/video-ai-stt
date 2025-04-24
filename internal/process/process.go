@@ -10,6 +10,7 @@ const (
 	REQUEST_GROQ_API_END                  // 5: groq api request 완료
 	GENERATE_SUBTITLE_START               // 6: groq api subtitle 요청
 	GENERATE_SUBTITLE_COMPLETE            // 7: groq api subtitle 완료
+	ALL_PROCESS_COMPLETE                  // 8: 모든 process 완료
 )
 
 type ProcessedManager struct {

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sync"
 	"video-ai-stt/config"
+	"video-ai-stt/internal/job"
 	"video-ai-stt/internal/process"
 )
 
@@ -28,7 +29,7 @@ func NewGroq(cfg config.Groq, processed *process.ProcessedManager) *Groq {
 	}
 }
 
-func (g *Groq) Process(ctx context.Context, audioCh <-chan string) error {
+func (g *Groq) Process(ctx context.Context, audioCh <-chan *job.Job) error {
 
 	wg := sync.WaitGroup{}
 
@@ -38,37 +39,37 @@ LOOP:
 		case <-ctx.Done():
 			slog.Debug("groq client goroutine close")
 			break LOOP
-		case path, ok := <-audioCh:
+		case jobs, ok := <-audioCh:
 			if !ok {
 				slog.Debug("groq client audioCh closed, breaking loop")
 				break LOOP
 			}
-
-			slog.Debug("groq client audioCh receive", "path", path)
-			alreadyProcess := g.processed.IsProcessed(path, process.REQUEST_GROQ_API_START)
+			logger := slog.With("rid", jobs.GetRID(), "video_path", jobs.GetVideoPath(), "audio_path", jobs.GetAudioPath())
+			logger.Debug("groq client audioCh receive", "step", process.REQUEST_GROQ_API_START)
+			alreadyProcess := g.processed.IsProcessed(jobs.GetVideoPath(), process.REQUEST_GROQ_API_START)
 			if alreadyProcess {
 				continue
 			}
 
 			wg.Add(1)
-			go func(audioPath string) {
+			go func(jobs *job.Job) {
 				defer wg.Done()
 
-				g.processed.MarkProcessed(audioPath, process.REQUEST_GROQ_API_START)
-				filename, output, err := g.requestSubtitle(audioPath)
+				g.processed.MarkProcessed(jobs.GetVideoPath(), process.REQUEST_GROQ_API_START)
+				filename, result, err := g.requestSubtitle(jobs.GetAudioPath())
 				if err != nil {
-					slog.Error("failed request groq api", "err", err.Error())
+					logger.Error("failed request groq api", "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
 					return
 				}
 
-				if err := g.generateTextFile(filename, output); err != nil {
-					slog.Error("failed generate output text file", "output", output, "err", err.Error())
+				if err := g.generateTextFile(jobs, filename, result); err != nil {
+					logger.Error("failed generate output text file", "result", result, "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
 					return
 				}
 
-				g.processed.MarkProcessed(audioPath, process.REQUEST_GROQ_API_END)
-				slog.Info("end generate subtitle goroutine", "path", audioPath, "step", process.REQUEST_GROQ_API_END)
-			}(path)
+				g.processed.MarkProcessed(jobs.GetVideoPath(), process.ALL_PROCESS_COMPLETE)
+				logger.Info("end generate subtitle goroutine", "step", process.ALL_PROCESS_COMPLETE)
+			}(jobs)
 		}
 	}
 
@@ -163,9 +164,11 @@ func (g *Groq) requestSubtitle(audioPath string) (string, string, error) {
 	return filename, sttResp.Text, nil
 }
 
-func (g *Groq) generateTextFile(filename, text string) error {
+func (g *Groq) generateTextFile(jobs *job.Job, filename, text string) error {
 
-	slog.Info("generate output file", "step", process.GENERATE_SUBTITLE_START)
+	logger := slog.With("rid", jobs.GetRID(), "video_path", jobs.GetVideoPath(), "audio_path", jobs.GetAudioPath())
+	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_START)
+
 	nameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 	newFilename := nameWithoutExt + ".txt"
 	outputPath := filepath.Join(g.cfg.OutputDir, filepath.Base(newFilename))
@@ -174,6 +177,7 @@ func (g *Groq) generateTextFile(filename, text string) error {
 		return fmt.Errorf("failed creating output file: %w", err)
 	}
 
-	slog.Info("generate output file", "step", process.GENERATE_SUBTITLE_COMPLETE)
+	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_COMPLETE)
+
 	return nil
 }
