@@ -10,12 +10,11 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
+	"path/filepath"
 	"sync"
 	"video-ai-stt/config"
 	"video-ai-stt/internal/job"
 	"video-ai-stt/internal/process"
-	"video-ai-stt/utils"
 )
 
 type Groq struct {
@@ -63,12 +62,7 @@ LOOP:
 					return
 				}
 
-				if err := g.generateJSONFile(jobs, filename, resp); err != nil {
-					logger.Error("failed generate output text file", "result", resp.Text, "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
-					return
-				}
-
-				if err := g.generateSRTFile(jobs, filename, resp.Segments); err != nil {
+				if err := g.generateTextFile(jobs, filename, resp.Text); err != nil {
 					logger.Error("failed generate output text file", "result", resp.Text, "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
 					return
 				}
@@ -104,11 +98,8 @@ func (g *Groq) requestSubtitle(audioPath string) (string, *STTResp, error) {
 		return "", nil, fmt.Errorf("failed write field response_format, err: %w", err)
 	}
 
-	granularities := []string{"word", "segment"}
-	for _, segment := range granularities {
-		if err := writer.WriteField("timestamp_granularities[]", segment); err != nil {
-			return "", nil, fmt.Errorf("failed write field timestamp_granularities, err: %w", err)
-		}
+	if err := writer.WriteField("timestamp_granularities[]", "word"); err != nil {
+		return "", nil, fmt.Errorf("failed write field timestamp_granularities, err: %w", err)
 	}
 
 	file, err := os.Open(audioPath)
@@ -173,66 +164,20 @@ func (g *Groq) requestSubtitle(audioPath string) (string, *STTResp, error) {
 	return filename, &sttResp, nil
 }
 
-func (g *Groq) generateJSONFile(jobs *job.Job, filename string, resp *STTResp) error {
+func (g *Groq) generateTextFile(jobs *job.Job, filename, text string) error {
 
-	outputPath := utils.GetOutputPath(g.cfg.OutputDir, filename, ".json")
-
-	logger := slog.With("rid", jobs.GetRID(), "video_path", jobs.GetVideoPath(), "audio_path", jobs.GetAudioPath(), "json_path", outputPath, "output_path", "json")
+	logger := slog.With("rid", jobs.GetRID(), "video_path", jobs.GetVideoPath(), "audio_path", jobs.GetAudioPath())
 	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_START)
 
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed creating output file: %w", err)
-	}
-	defer file.Close()
+	nameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
+	newFilename := nameWithoutExt + ".txt"
+	outputPath := filepath.Join(g.cfg.OutputDir, filepath.Base(newFilename))
 
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ") // 들여쓰기를 위해 설정
-	if err := encoder.Encode(resp); err != nil {
-		return fmt.Errorf("failed encoding response: %w", err)
+	if err := os.WriteFile(outputPath, []byte(text), 0644); err != nil {
+		return fmt.Errorf("failed creating output file: %w", err)
 	}
 
 	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_COMPLETE)
+
 	return nil
-}
-
-func (g *Groq) generateSRTFile(jobs *job.Job, filename string, words []Segments) error {
-
-	outputPath := utils.GetOutputPath(g.cfg.OutputDir, filename, ".srt")
-	logger := slog.With("rid", jobs.GetRID(), "video_path", jobs.GetVideoPath(), "audio_path", jobs.GetAudioPath(), "json_path", outputPath, "output_type", "srt")
-	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_START)
-
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed creating output file: %w", err)
-	}
-	defer file.Close()
-
-	srtContent := g.toSRT(words)
-	_, err = file.WriteString(srtContent)
-	if err != nil {
-		return fmt.Errorf("failed writing to output file: %w", err)
-	}
-
-	logger.Info("generate output file", "step", process.GENERATE_SUBTITLE_COMPLETE)
-	return nil
-}
-
-func srtFormatTime(seconds float64) string {
-	hours := int(seconds) / 3600
-	minutes := (int(seconds) % 3600) / 60
-	secs := int(seconds) % 60
-	milliseconds := int((seconds - float64(int(seconds))) * 1000)
-
-	return fmt.Sprintf("%02d:%02d:%02d,%03d", hours, minutes, secs, milliseconds)
-}
-
-func (g *Groq) toSRT(segments []Segments) string {
-	var srt string
-	for _, segment := range segments {
-		start := srtFormatTime(segment.Start)
-		end := srtFormatTime(segment.End)
-		srt += fmt.Sprintf("%d\n%s --> %s\n%s\n\n", segment.ID+1, start, end, strings.TrimSpace(segment.Text))
-	}
-	return srt
 }
