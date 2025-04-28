@@ -56,14 +56,14 @@ LOOP:
 				defer wg.Done()
 
 				g.processed.MarkProcessed(jobs.GetVideoPath(), process.REQUEST_GROQ_API_START)
-				filename, result, err := g.requestSubtitle(jobs.GetAudioPath())
+				filename, resp, err := g.requestSubtitle(jobs.GetAudioPath())
 				if err != nil {
 					logger.Error("failed request groq api", "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
 					return
 				}
 
-				if err := g.generateTextFile(jobs, filename, result); err != nil {
-					logger.Error("failed generate output text file", "result", result, "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
+				if err := g.generateTextFile(jobs, filename, resp.Text); err != nil {
+					logger.Error("failed generate output text file", "result", resp.Text, "err", err.Error(), "step", process.REQUEST_GROQ_API_START)
 					return
 				}
 
@@ -80,35 +80,31 @@ LOOP:
 	return nil
 }
 
-func (g *Groq) requestSubtitle(audioPath string) (string, string, error) {
+func (g *Groq) requestSubtitle(audioPath string) (string, *STTResp, error) {
 
 	// multipart/form-data 구성
 	var requestBody bytes.Buffer
 	writer := multipart.NewWriter(&requestBody)
 
 	if err := writer.WriteField("model", g.cfg.STTUseModel); err != nil {
-		return "", "", fmt.Errorf("failed write field model, err: %w", err)
+		return "", nil, fmt.Errorf("failed write field model, err: %w", err)
 	}
 
 	if err := writer.WriteField("temperature", "0"); err != nil {
-		return "", "", fmt.Errorf("failed write field temperature, err: %w", err)
+		return "", nil, fmt.Errorf("failed write field temperature, err: %w", err)
 	}
 
 	if err := writer.WriteField("response_format", "verbose_json"); err != nil {
-		return "", "", fmt.Errorf("failed write field response_format, err: %w", err)
+		return "", nil, fmt.Errorf("failed write field response_format, err: %w", err)
 	}
 
 	if err := writer.WriteField("timestamp_granularities[]", "word"); err != nil {
-		return "", "", fmt.Errorf("failed write field timestamp_granularities, err: %w", err)
-	}
-
-	if err := writer.WriteField("language", "ko"); err != nil {
-		return "", "", fmt.Errorf("failed write field language, err: %w", err)
+		return "", nil, fmt.Errorf("failed write field timestamp_granularities, err: %w", err)
 	}
 
 	file, err := os.Open(audioPath)
 	if err != nil {
-		return "", "", fmt.Errorf("failed opening audio file: %w", err)
+		return "", nil, fmt.Errorf("failed opening audio file: %w", err)
 	}
 	defer file.Close()
 
@@ -117,21 +113,21 @@ func (g *Groq) requestSubtitle(audioPath string) (string, string, error) {
 	// 파일 파트 추가
 	filePart, err := writer.CreateFormFile("file", filename)
 	if err != nil {
-		return "", "", fmt.Errorf("failed creating form file: %w", err)
+		return "", nil, fmt.Errorf("failed creating form file: %w", err)
 	}
 	_, err = io.Copy(filePart, file)
 	if err != nil {
-		return "", "", fmt.Errorf("failed copying audio file: %w", err)
+		return "", nil, fmt.Errorf("failed copying audio file: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
-		return "", "", fmt.Errorf("failed closing writer: %w", err)
+		return "", nil, fmt.Errorf("failed closing writer: %w", err)
 	}
 
 	// HTTP 요청 생성
 	req, err := http.NewRequest("POST", g.cfg.STTEndpoint, &requestBody)
 	if err != nil {
-		return "", "", fmt.Errorf("failed creating request: %w", err)
+		return "", nil, fmt.Errorf("failed creating request: %w", err)
 	}
 
 	// 인증 및 헤더 설정
@@ -145,23 +141,27 @@ func (g *Groq) requestSubtitle(audioPath string) (string, string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return filename, "", fmt.Errorf("failed sending request: %w", err)
+		return filename, nil, fmt.Errorf("failed sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// 응답 읽기
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", fmt.Errorf("failed reading response: %w", err)
+		return "", nil, fmt.Errorf("failed reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("failed curl groq api, status_code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	sttResp := STTResp{}
 	if err := json.Unmarshal(body, &sttResp); err != nil {
-		return "", "", fmt.Errorf("failed unmarshalling response: %w, body : %s", err, string(body))
+		return "", nil, fmt.Errorf("failed unmarshalling response: %w, body : %s", err, string(body))
 	}
 
 	slog.Info("groq audio transcriptions call response", "step", process.REQUEST_GROQ_API_END, "status_code", resp.StatusCode, "body", string(body), "duration", sttResp.Duration, "task", sttResp.Task, "language", sttResp.Language)
-	return filename, sttResp.Text, nil
+	return filename, &sttResp, nil
 }
 
 func (g *Groq) generateTextFile(jobs *job.Job, filename, text string) error {
